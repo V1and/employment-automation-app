@@ -543,7 +543,6 @@ with tab5:
     )
 
     with tab6:
-    with tab6:
 
     st.subheader("연구 데이터 상관관계 분석")
 
