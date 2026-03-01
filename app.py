@@ -1,8 +1,11 @@
-import os
-import matplotlib as mpl
+import streamlit as st
+import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import matplotlib.font_manager as fm
-from scipy import stats
+import statsmodels.formula.api as smf
+import os
 
 def setup_korean_font():
     # 경로는 대소문자 정확히!
