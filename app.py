@@ -4,6 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import statsmodels.formula.api as smf
 import matplotlib as mpl
+import matplotlib as mpl
+
+mpl.rcParams["axes.unicode_minus"] = False
+mpl.rcParams["font.family"] = ["DejaVu Sans"]  # 기본 탑재 폰트
 mpl.rcParams['font.family'] = 'Malgun Gothic'   # 윈도우 기본 한글폰트
 mpl.rcParams['axes.unicode_minus'] = False      # 마이너스 깨짐 방지
 
