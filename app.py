@@ -543,51 +543,188 @@ with tab5:
     )
 
     with tab6:
+        st.subheader("연구 데이터 상관관계 · 가설검정(피어슨)")
 
-        st.subheader("연구 데이터 상관관계 분석")
+        # -------------------------
+        # 0) 기간 선택(민감도 분석 핵심)
+        # -------------------------
+        y_min = int(df["year"].min())
+        y_max = int(df["year"].max())
 
-        corr_df = df.dropna(
-            subset=["robot_density","industry","service"]
-        )
+        st.markdown("### 1) 분석 기간 설정")
+        period = st.slider("연도 구간", y_min, y_max, (max(2010, y_min), y_max))
+        start_y, end_y = int(period[0]), int(period[1])
 
-        option = st.selectbox(
-            "분석 관계 선택",
+        # -------------------------
+        # 1) 분석 관계 선택
+        # -------------------------
+        st.markdown("### 2) 분석 관계 선택")
+        relation = st.selectbox(
+            "상관관계를 볼 변수 조합",
             [
-                "로봇밀도 vs 제조업 고용",
-                "로봇밀도 vs 서비스업 고용",
-                "제조업 vs 서비스업"
-            ]
+                "로봇밀도 vs 제조업 고용비중",
+                "로봇밀도 vs 서비스업 고용비중",
+                "제조업 고용비중 vs 서비스업 고용비중",
+            ],
+            index=0
         )
 
-        if option == "로봇밀도 vs 제조업 고용":
-            x = corr_df["robot_density"]
-            y = corr_df["industry"]
-            label_y = "제조업 고용 비중"
-
-        elif option == "로봇밀도 vs 서비스업 고용":
-            x = corr_df["robot_density"]
-            y = corr_df["service"]
-            label_y = "서비스업 고용 비중"
-
+        # 관계에 따라 컬럼 매핑
+        if relation == "로봇밀도 vs 제조업 고용비중":
+            x_col, y_col = "robot_density", "industry"
+            x_name, y_name = "로봇 밀도", "제조업 고용 비중(%)"
+        elif relation == "로봇밀도 vs 서비스업 고용비중":
+            x_col, y_col = "robot_density", "service"
+            x_name, y_name = "로봇 밀도", "서비스업 고용 비중(%)"
         else:
-            x = corr_df["industry"]
-            y = corr_df["service"]
-            label_y = "서비스업 고용 비중"
+            x_col, y_col = "industry", "service"
+            x_name, y_name = "제조업 고용 비중(%)", "서비스업 고용 비중(%)"
 
-        from scipy import stats
+        alpha = st.selectbox("유의수준(α)", [0.10, 0.05, 0.01], index=1)
+
+        # -------------------------
+        # 2) 표본/전처리 리포트 (꼬투리 방어)
+        # -------------------------
+        st.markdown("### 3) 데이터 리포트(전처리)")
+
+        base_all = df[df["year"].between(start_y, end_y)].copy()
+        total_rows = len(base_all)
+        total_countries = base_all["country"].nunique()
+
+        need_cols = ["country", "year", x_col, y_col]
+        before_na = len(base_all)
+        base = base_all.dropna(subset=need_cols).copy()
+        after_na = len(base)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("선택 구간 국가 수", f"{total_countries}")
+        c2.metric("원본 행 수", f"{total_rows}")
+        c3.metric("결측 제거 후 행 수", f"{after_na}")
+        c4.metric("제거된 행 수", f"{before_na - after_na}")
+
+        st.caption(
+            "주의: 여기서의 상관/검정은 **단순 상관**이며, GDP·국가효과·연도효과 같은 통제는 포함하지 않습니다."
+        )
+
+        if after_na < 3:
+            st.error("결측 제거 후 표본이 너무 적습니다. (최소 3개 이상 필요)")
+            st.stop()
+
+        # -------------------------
+        # 3) 전체 표본 상관 + 가설검정
+        # -------------------------
+        st.markdown("### 4) 전체 표본 상관검정 결과")
+
+        x = pd.to_numeric(base[x_col], errors="coerce")
+        y = pd.to_numeric(base[y_col], errors="coerce")
+
+        # 안전 처리
+        xy = pd.DataFrame({"x": x, "y": y}).replace([np.inf, -np.inf], np.nan).dropna()
+        n = len(xy)
+        if n < 3:
+            st.error("유효 표본이 3 미만입니다. 데이터 구간/변수를 바꾸세요.")
+            st.stop()
+
+        x = xy["x"].to_numpy()
+        y = xy["y"].to_numpy()
+
         r, p = stats.pearsonr(x, y)
 
-        st.metric("상관계수 r", f"{r:.3f}")
-        st.metric("p-value", f"{p:.5f}")
+        # t 통계량(설명용)
+        r_safe = float(np.clip(r, -0.999999, 0.999999))
+        t_stat = r_safe * np.sqrt((n - 2) / (1 - r_safe**2))
 
-        if p < 0.05:
-            st.success("통계적으로 유의한 상관관계 존재")
+        cc1, cc2, cc3, cc4 = st.columns(4)
+        cc1.metric("표본 수 n", f"{n}")
+        cc2.metric("상관계수 r", f"{r:.4f}")
+        cc3.metric("p-value", f"{p:.6f}")
+        cc4.metric("t(설명용)", f"{t_stat:.3f}")
+
+        # 자동 결론 문장
+        st.markdown("#### 결론(자동 생성)")
+        if p < alpha:
+            st.success(
+                f"{start_y}~{end_y} 구간에서 **{x_name}**와(과) **{y_name}**의 상관은 "
+                f"유의수준 α={alpha}에서 **통계적으로 유의**합니다 (p={p:.6f}). "
+                f"상관계수 r={r:.4f}로, 관계 방향은 **{'양(+)의' if r>0 else '음(-)의'} 상관**입니다."
+            )
         else:
-            st.warning("통계적으로 유의하지 않음")
+            st.warning(
+                f"{start_y}~{end_y} 구간에서 **{x_name}**와(과) **{y_name}**의 단순 상관은 "
+                f"유의수준 α={alpha}에서 **유의하다고 말할 근거가 부족**합니다 (p={p:.6f}). "
+                "이는 국가별 이질성/기간 효과가 상쇄되었을 가능성이 큽니다."
+            )
+
+        # 산점도 + 회귀선
+        st.markdown("### 5) 산점도(회귀선 포함)")
+        slope, intercept = np.polyfit(x, y, 1)
+        x_line = np.linspace(float(np.min(x)), float(np.max(x)), 60)
+        y_line = slope * x_line + intercept
 
         fig = plt.figure()
         plt.scatter(x, y)
-        plt.xlabel("X 변수")
-        plt.ylabel(label_y)
-        plt.grid(True)
+        plt.plot(x_line, y_line)
+        plt.xlabel(x_name)
+        plt.ylabel(y_name)
+        plt.grid(True, alpha=0.3)
         st.pyplot(fig)
+
+        # -------------------------
+        # 4) 국가별 상관계수(핵심 업그레이드)
+        # -------------------------
+        st.markdown("### 6) 국가별 상관관계(랭킹)")
+
+        # 국가별 계산
+        rows = []
+        for c, sub in base.groupby("country"):
+            sub2 = sub.dropna(subset=[x_col, y_col]).copy()
+            if len(sub2) < 3:
+                continue
+            x_c = pd.to_numeric(sub2[x_col], errors="coerce").to_numpy()
+            y_c = pd.to_numeric(sub2[y_col], errors="coerce").to_numpy()
+            # 쌍 결측 제거
+            tmp = pd.DataFrame({"x": x_c, "y": y_c}).dropna()
+            if len(tmp) < 3:
+                continue
+            rr, pp = stats.pearsonr(tmp["x"].to_numpy(), tmp["y"].to_numpy())
+            rows.append({
+                "국가(ISO3)": c,
+                "표본수(n)": len(tmp),
+                "상관계수(r)": rr,
+                "p-value": pp,
+                "|r|": abs(rr),
+            })
+
+        country_corr = pd.DataFrame(rows)
+
+        if country_corr.empty:
+            st.warning("국가별로 계산할 표본이 부족합니다. (국가별 최소 3개 연도 필요)")
+        else:
+            # 표시용 정렬
+            view_mode = st.radio("정렬 기준", ["|r| 큰 순", "r 큰 순", "p-value 작은 순"], horizontal=True)
+
+            if view_mode == "|r| 큰 순":
+                country_corr = country_corr.sort_values("|r|", ascending=False)
+            elif view_mode == "r 큰 순":
+                country_corr = country_corr.sort_values("상관계수(r)", ascending=False)
+            else:
+                country_corr = country_corr.sort_values("p-value", ascending=True)
+
+            st.dataframe(
+                country_corr.drop(columns=["|r|"]).reset_index(drop=True),
+                use_container_width=True
+            )
+
+            # TOP / BOTTOM 요약
+            top5 = country_corr.head(5)[["국가(ISO3)", "상관계수(r)", "p-value", "표본수(n)"]]
+            bot5 = country_corr.tail(5)[["국가(ISO3)", "상관계수(r)", "p-value", "표본수(n)"]]
+
+            colA, colB = st.columns(2)
+            with colA:
+                st.markdown("**상관 강한 TOP5**")
+                st.dataframe(top5.reset_index(drop=True), use_container_width=True)
+            with colB:
+                st.markdown("**상관 약한/반대 BOTTOM5**")
+                st.dataframe(bot5.reset_index(drop=True), use_container_width=True)
+
+        st.caption("주의: 상관관계는 인과관계가 아닙니다. (상관 ≠ 원인-결과)")
