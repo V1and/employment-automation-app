@@ -6,6 +6,7 @@ import matplotlib as mpl
 import matplotlib.font_manager as fm
 import statsmodels.formula.api as smf
 import os
+from scipy import stats
 
 def setup_korean_font():
     # 경로는 대소문자 정확히!
