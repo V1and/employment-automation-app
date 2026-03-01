@@ -1,29 +1,25 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import statsmodels.formula.api as smf
 import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
 def setup_korean_font():
-    # 1) 폰트 파일은 반드시 "고정 폰트" 사용 권장
-    font_path = os.path.join("fonts", "NotoSansKR-Regular.otf")  # 또는 .ttf
+    # 경로는 대소문자 정확히!
+    font_path = os.path.join(os.getcwd(), "fonts", "NotoSansKR-Regular.otf")
 
-    if os.path.exists(font_path):
-        # 2) matplotlib에 폰트 등록(이게 핵심)
+    if os.path.isfile(font_path):
+        # 1) 폰트 등록
         fm.fontManager.addfont(font_path)
+        # 2) 폰트 이름 얻기
         font_name = fm.FontProperties(fname=font_path).get_name()
+        # 3) 기본 폰트로 지정
         mpl.rcParams["font.family"] = font_name
+        mpl.rcParams["font.sans-serif"] = [font_name]
     else:
-        # 폰트 파일이 없으면 일단 기본 폰트로
+        # 폰트 없으면 기본(영문만 보장)
         mpl.rcParams["font.family"] = "DejaVu Sans"
 
-    # 마이너스 깨짐 방지
     mpl.rcParams["axes.unicode_minus"] = False
-
-    # 보기 좋게
     mpl.rcParams["font.size"] = 13
     mpl.rcParams["figure.dpi"] = 120
 
