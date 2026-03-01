@@ -732,121 +732,121 @@ with tab5:
                     st.markdown("**상관 약한/반대 BOTTOM5**")
                     st.dataframe(bot5.reset_index(drop=True), use_container_width=True)
 
-            st.caption("주의: 상관관계는 인과관계가 아닙니다. (상관 ≠ 원인-결과)")
-            st.info("여기에 연구 데이터 상관분석 코드를 유지하세요.")
-
-with sub2:
-            st.markdown("## 학생용 상관관계 계산기(직접 입력)")
-            st.caption("두 양적 자료(X, Y)를 입력하면 피어슨 상관계수 r과 p-value를 계산합니다.")
-
-            colA, colB = st.columns(2)
-            with colA:
-                x_name = st.text_input("X 변수 이름", value="키(cm)")
-            with colB:
-                y_name = st.text_input("Y 변수 이름", value="몸무게(kg)")
-
-            st.markdown("### 1) 데이터 입력")
-            st.caption("쉼표(,) 또는 줄바꿈으로 숫자를 입력하세요. X와 Y의 개수는 같아야 합니다.")
-
-            c1, c2 = st.columns(2)
-            with c1:
-                x_raw = st.text_area(
-                    "X 값들",
-                    value="160, 165, 170, 175, 180",
-                    height=130
-                )
-            with c2:
-                y_raw = st.text_area(
-                    "Y 값들",
-                    value="55, 60, 65, 72, 78",
-                    height=130
-                )
-
-            def parse_numbers(txt: str):
-                # 콤마/줄바꿈/스페이스 섞여도 처리
-                txt = txt.replace("\n", ",").replace(" ", "")
-                parts = [p for p in txt.split(",") if p != ""]
-                nums = []
-                for p in parts:
-                    try:
-                        nums.append(float(p))
-                    except:
-                        return None
-                return nums
-
-            x_list = parse_numbers(x_raw)
-            y_list = parse_numbers(y_raw)
-
-            st.markdown("### 2) 계산")
-            do_calc = st.button("상관관계 계산하기")
-
-            if do_calc:
-                if (x_list is None) or (y_list is None):
-                    st.error("숫자 파싱 실패. 문자/한글/기호가 섞였는지 확인하세요.")
-                    st.stop()
-
-                if len(x_list) != len(y_list):
-                    st.error(f"X 개수({len(x_list)})와 Y 개수({len(y_list)})가 다릅니다. 개수를 맞추세요.")
-                    st.stop()
-
-                if len(x_list) < 3:
-                    st.error("표본이 너무 적습니다. 최소 3쌍 이상 입력하세요.")
-                    st.stop()
-
-                x = np.array(x_list, dtype=float)
-                y = np.array(y_list, dtype=float)
-
-                # 상수열(분산 0) 방지
-                if np.std(x) == 0 or np.std(y) == 0:
-                    st.error("X 또는 Y가 전부 같은 값입니다(분산=0). 상관계수 계산 불가.")
-                    st.stop()
-
-                r, p = stats.pearsonr(x, y)
-                n = len(x)
-
-                alpha = st.selectbox("유의수준(α)", [0.10, 0.05, 0.01], index=1)
-
-                m1, m2, m3 = st.columns(3)
-                m1.metric("표본 수 n", f"{n}")
-                m2.metric("상관계수 r", f"{r:.4f}")
-                m3.metric("p-value", f"{p:.6f}")
-
-                st.markdown("### 3) 결론(자동 생성)")
-                if p < alpha:
-                    st.success(
-                        f"유의수준 α={alpha}에서 p-value={p:.6f} < α 이므로 **귀무가설(H0: 상관=0)을 기각**합니다.\n\n"
-                        f"따라서 **{x_name}**와(과) **{y_name}** 사이에는 통계적으로 유의한 상관관계가 있습니다.\n"
-                        f"(r={r:.4f}, 방향: {'양(+)의' if r>0 else '음(-)의'})"
-                    )
-                else:
-                    st.warning(
-                        f"유의수준 α={alpha}에서 p-value={p:.6f} ≥ α 이므로 **귀무가설을 기각하지 못합니다.**\n\n"
-                        f"따라서 **{x_name}**와(과) **{y_name}** 사이의 상관관계가 유의하다고 말할 근거가 부족합니다."
-                    )
-
                 st.caption("주의: 상관관계는 인과관계가 아닙니다. (상관 ≠ 원인-결과)")
+                st.info("여기에 연구 데이터 상관분석 코드를 유지하세요.")
 
-                st.markdown("### 4) 산점도")
-                fig = plt.figure()
-                plt.scatter(x, y)
-                # 회귀선
-                slope, intercept = np.polyfit(x, y, 1)
-                x_line = np.linspace(float(x.min()), float(x.max()), 60)
-                y_line = slope * x_line + intercept
-                plt.plot(x_line, y_line)
+                with sub2:
+                            st.markdown("## 학생용 상관관계 계산기(직접 입력)")
+                            st.caption("두 양적 자료(X, Y)를 입력하면 피어슨 상관계수 r과 p-value를 계산합니다.")
 
-                plt.xlabel(x_name)
-                plt.ylabel(y_name)
-                plt.grid(True, alpha=0.3)
-                st.pyplot(fig)
+                            colA, colB = st.columns(2)
+                            with colA:
+                                x_name = st.text_input("X 변수 이름", value="키(cm)")
+                            with colB:
+                                y_name = st.text_input("Y 변수 이름", value="몸무게(kg)")
 
-                # 다운로드용 CSV
-                out_df = pd.DataFrame({x_name: x, y_name: y})
-                csv_bytes = out_df.to_csv(index=False).encode("utf-8-sig")
-                st.download_button(
-                    "입력 데이터 CSV로 다운로드",
-                    data=csv_bytes,
-                    file_name="correlation_input.csv",
-                    mime="text/csv"
-                )
-            pass
+                            st.markdown("### 1) 데이터 입력")
+                            st.caption("쉼표(,) 또는 줄바꿈으로 숫자를 입력하세요. X와 Y의 개수는 같아야 합니다.")
+
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                x_raw = st.text_area(
+                                    "X 값들",
+                                    value="160, 165, 170, 175, 180",
+                                    height=130
+                                )
+                            with c2:
+                                y_raw = st.text_area(
+                                    "Y 값들",
+                                    value="55, 60, 65, 72, 78",
+                                    height=130
+                                )
+
+                            def parse_numbers(txt: str):
+                                # 콤마/줄바꿈/스페이스 섞여도 처리
+                                txt = txt.replace("\n", ",").replace(" ", "")
+                                parts = [p for p in txt.split(",") if p != ""]
+                                nums = []
+                                for p in parts:
+                                    try:
+                                        nums.append(float(p))
+                                    except:
+                                        return None
+                                return nums
+
+                            x_list = parse_numbers(x_raw)
+                            y_list = parse_numbers(y_raw)
+
+                            st.markdown("### 2) 계산")
+                            do_calc = st.button("상관관계 계산하기")
+
+                            if do_calc:
+                                if (x_list is None) or (y_list is None):
+                                    st.error("숫자 파싱 실패. 문자/한글/기호가 섞였는지 확인하세요.")
+                                    st.stop()
+
+                                if len(x_list) != len(y_list):
+                                    st.error(f"X 개수({len(x_list)})와 Y 개수({len(y_list)})가 다릅니다. 개수를 맞추세요.")
+                                    st.stop()
+
+                                if len(x_list) < 3:
+                                    st.error("표본이 너무 적습니다. 최소 3쌍 이상 입력하세요.")
+                                    st.stop()
+
+                                x = np.array(x_list, dtype=float)
+                                y = np.array(y_list, dtype=float)
+
+                                # 상수열(분산 0) 방지
+                                if np.std(x) == 0 or np.std(y) == 0:
+                                    st.error("X 또는 Y가 전부 같은 값입니다(분산=0). 상관계수 계산 불가.")
+                                    st.stop()
+
+                                r, p = stats.pearsonr(x, y)
+                                n = len(x)
+
+                                alpha = st.selectbox("유의수준(α)", [0.10, 0.05, 0.01], index=1)
+
+                                m1, m2, m3 = st.columns(3)
+                                m1.metric("표본 수 n", f"{n}")
+                                m2.metric("상관계수 r", f"{r:.4f}")
+                                m3.metric("p-value", f"{p:.6f}")
+
+                                st.markdown("### 3) 결론(자동 생성)")
+                                if p < alpha:
+                                    st.success(
+                                        f"유의수준 α={alpha}에서 p-value={p:.6f} < α 이므로 **귀무가설(H0: 상관=0)을 기각**합니다.\n\n"
+                                        f"따라서 **{x_name}**와(과) **{y_name}** 사이에는 통계적으로 유의한 상관관계가 있습니다.\n"
+                                        f"(r={r:.4f}, 방향: {'양(+)의' if r>0 else '음(-)의'})"
+                                    )
+                                else:
+                                    st.warning(
+                                        f"유의수준 α={alpha}에서 p-value={p:.6f} ≥ α 이므로 **귀무가설을 기각하지 못합니다.**\n\n"
+                                        f"따라서 **{x_name}**와(과) **{y_name}** 사이의 상관관계가 유의하다고 말할 근거가 부족합니다."
+                                    )
+
+                                st.caption("주의: 상관관계는 인과관계가 아닙니다. (상관 ≠ 원인-결과)")
+
+                                st.markdown("### 4) 산점도")
+                                fig = plt.figure()
+                                plt.scatter(x, y)
+                                # 회귀선
+                                slope, intercept = np.polyfit(x, y, 1)
+                                x_line = np.linspace(float(x.min()), float(x.max()), 60)
+                                y_line = slope * x_line + intercept
+                                plt.plot(x_line, y_line)
+
+                                plt.xlabel(x_name)
+                                plt.ylabel(y_name)
+                                plt.grid(True, alpha=0.3)
+                                st.pyplot(fig)
+
+                                # 다운로드용 CSV
+                                out_df = pd.DataFrame({x_name: x, y_name: y})
+                                csv_bytes = out_df.to_csv(index=False).encode("utf-8-sig")
+                                st.download_button(
+                                    "입력 데이터 CSV로 다운로드",
+                                    data=csv_bytes,
+                                    file_name="correlation_input.csv",
+                                    mime="text/csv"
+                                )
+                            pass
