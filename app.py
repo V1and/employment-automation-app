@@ -1,15 +1,22 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import statsmodels.formula.api as smf
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import matplotlib as mpl
-import matplotlib as mpl
+import os
+
+font_path = os.path.join("fonts", "NotoSansKR-VariableFont_wght.ttf")
+
+if os.path.exists(font_path):
+    font_prop = fm.FontProperties(fname=font_path)
+    mpl.rcParams["font.family"] = font_prop.get_name()
 
 mpl.rcParams["axes.unicode_minus"] = False
-mpl.rcParams["font.family"] = ["DejaVu Sans"]  # 기본 탑재 폰트
-mpl.rcParams['font.family'] = 'Malgun Gothic'   # 윈도우 기본 한글폰트
-mpl.rcParams['axes.unicode_minus'] = False      # 마이너스 깨짐 방지
+
+plt.rcParams["font.size"] = 13
+plt.rcParams["figure.dpi"] = 120
 
 
 
