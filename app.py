@@ -735,7 +735,7 @@ with tab5:
             st.caption("주의: 상관관계는 인과관계가 아닙니다. (상관 ≠ 원인-결과)")
             st.info("여기에 연구 데이터 상관분석 코드를 유지하세요.")
 
-        with sub2:
+with sub2:
             st.markdown("## 학생용 상관관계 계산기(직접 입력)")
             st.caption("두 양적 자료(X, Y)를 입력하면 피어슨 상관계수 r과 p-value를 계산합니다.")
 
@@ -849,4 +849,4 @@ with tab5:
                     file_name="correlation_input.csv",
                     mime="text/csv"
                 )
-                    pass
+            pass
