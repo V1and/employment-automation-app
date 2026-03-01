@@ -544,50 +544,50 @@ with tab5:
 
     with tab6:
 
-    st.subheader("연구 데이터 상관관계 분석")
+        st.subheader("연구 데이터 상관관계 분석")
 
-    corr_df = df.dropna(
+        corr_df = df.dropna(
         subset=["robot_density","industry","service"]
-    )
+        )
 
-    option = st.selectbox(
+        option = st.selectbox(
         "분석 관계 선택",
         [
-            "로봇밀도 vs 제조업 고용",
-            "로봇밀도 vs 서비스업 고용",
-            "제조업 vs 서비스업"
+        "로봇밀도 vs 제조업 고용",
+        "로봇밀도 vs 서비스업 고용",
+        "제조업 vs 서비스업"
         ]
-    )
+        )
 
-    if option == "로봇밀도 vs 제조업 고용":
+        if option == "로봇밀도 vs 제조업 고용":
         x = corr_df["robot_density"]
         y = corr_df["industry"]
         label_y = "제조업 고용 비중"
 
-    elif option == "로봇밀도 vs 서비스업 고용":
+        elif option == "로봇밀도 vs 서비스업 고용":
         x = corr_df["robot_density"]
         y = corr_df["service"]
         label_y = "서비스업 고용 비중"
 
-    else:
+        else:
         x = corr_df["industry"]
         y = corr_df["service"]
         label_y = "서비스업 고용 비중"
 
-    from scipy import stats
-    r, p = stats.pearsonr(x, y)
+        from scipy import stats
+        r, p = stats.pearsonr(x, y)
 
-    st.metric("상관계수 r", f"{r:.3f}")
-    st.metric("p-value", f"{p:.5f}")
+        st.metric("상관계수 r", f"{r:.3f}")
+        st.metric("p-value", f"{p:.5f}")
 
-    if p < 0.05:
+        if p < 0.05:
         st.success("통계적으로 유의한 상관관계 존재")
-    else:
+        else:
         st.warning("통계적으로 유의하지 않음")
 
-    fig = plt.figure()
-    plt.scatter(x, y)
-    plt.xlabel("X 변수")
-    plt.ylabel(label_y)
-    plt.grid(True)
-    st.pyplot(fig)
+        fig = plt.figure()
+        plt.scatter(x, y)
+        plt.xlabel("X 변수")
+        plt.ylabel(label_y)
+        plt.grid(True)
+        st.pyplot(fig)
