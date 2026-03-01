@@ -1,3 +1,7 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import statsmodels.formula.api as smf
 import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -24,7 +28,6 @@ def setup_korean_font():
     mpl.rcParams["figure.dpi"] = 120
 
 setup_korean_font()
-
 
 
 # =========================
