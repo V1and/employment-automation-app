@@ -2,6 +2,7 @@ import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
+from scipy import stats
 
 def setup_korean_font():
     # 경로는 대소문자 정확히!
@@ -199,7 +200,14 @@ st.divider()
 # =========================
 # 탭 구성
 # =========================
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["① 추세", "② 관계(상관/산점도)", "③ 회귀(FE)", "④ 예측(시나리오)", "⑤ 데이터/다운로드"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "① 추세 분석",
+    "② 관계 분석",
+    "③ 회귀 분석",
+    "④ 미래 예측",
+    "⑤ 데이터/다운로드",
+    "⑥ 가설검정(상관)"
+])
 
 # =========================
 # ① 추세
@@ -501,11 +509,141 @@ st.caption(f"로봇밀도 경로: {rd_path[0]:.1f} → {rd_path[-1]:.1f}")
 # ⑤ 데이터/다운로드
 # =========================
 with tab5:
-    st.subheader("필터된 데이터 확인 및 다운로드")
-    st.dataframe(d.reset_index(drop=True), use_container_width=True)
+    st.subheader("데이터 확인 / 다운로드")
 
-    csv = d.to_csv(index=False).encode("utf-8-sig")
-    st.download_button("현재 필터 데이터 CSV 다운로드", data=csv, file_name="filtered_data.csv", mime="text/csv")
+    st.markdown("### 현재 필터 적용 데이터")
+    st.write(f"- 선택 국가 수: **{d['country'].nunique()}개**")
+    st.write(f"- 연도 범위: **{year_range[0]} ~ {year_range[1]}**")
+    st.write(f"- 행 수: **{len(d)}개**")
 
-    st.markdown('<div class="card small">발표 팁: 회귀 결과 탭에서 β, p-value, 표본기간을 캡처해서 보고서에 넣으면 설득력이 급상승합니다.</div>',
-                unsafe_allow_html=True)
+    st.dataframe(d.head(50), use_container_width=True)
+
+    st.markdown("### CSV 다운로드")
+
+    # 다운로드용 CSV 생성
+    csv_bytes = d.to_csv(index=False).encode("utf-8-sig")
+    st.download_button(
+        label="📥 필터된 데이터 CSV 다운로드",
+        data=csv_bytes,
+        file_name=f"filtered_dataset_{year_range[0]}_{year_range[1]}.csv",
+        mime="text/csv"
+    )
+
+    st.markdown("### 전체 데이터 다운로드(원본)")
+    full_csv = df.to_csv(index=False).encode("utf-8-sig")
+    st.download_button(
+        label="📥 전체 데이터 CSV 다운로드",
+        data=full_csv,
+        file_name="full_dataset.csv",
+        mime="text/csv"
+    )
+
+    with tab6:
+    st.subheader("가설검정: 두 양적 자료의 상관관계(피어슨 상관검정)")
+
+    st.markdown(
+        "- **귀무가설(H0)**: 두 변수의 상관계수 ρ = 0 (상관관계 없음)\n"
+        "- **대립가설(H1)**: 두 변수의 상관계수 ρ ≠ 0 (상관관계 있음)\n"
+        "- **유의수준 α** 기준으로 p-value < α 이면 **H0 기각**"
+    )
+
+    alpha = st.selectbox("유의수준(α) 선택", [0.10, 0.05, 0.01], index=1)
+
+    input_mode = st.radio("데이터 입력 방식", ["CSV 업로드", "직접 입력"], horizontal=True)
+
+    if input_mode == "CSV 업로드":
+        up = st.file_uploader("CSV 파일 업로드", type=["csv"])
+        if up is None:
+            st.info("CSV를 업로드한 뒤 숫자형 열 2개를 선택하면 상관검정을 수행합니다.")
+            st.stop()
+
+        data = pd.read_csv(up)
+        st.dataframe(data.head(20), use_container_width=True)
+
+        # 숫자형 후보 열 추출
+        numeric_cols = []
+        for c in data.columns:
+            s = pd.to_numeric(data[c], errors="coerce")
+            if s.notna().sum() >= 3:
+                numeric_cols.append(c)
+
+        if len(numeric_cols) < 2:
+            st.error("숫자형으로 쓸 수 있는 열이 2개 이상 필요합니다. (결측/문자 제거 후 재업로드)")
+            st.stop()
+
+        col_x = st.selectbox("X 변수 선택", numeric_cols, index=0)
+        col_y = st.selectbox("Y 변수 선택", numeric_cols, index=1)
+
+        x = pd.to_numeric(data[col_x], errors="coerce")
+        y = pd.to_numeric(data[col_y], errors="coerce")
+
+    else:
+        st.caption("예: 1,2,3,4,5 형태로 콤마로 구분해서 입력")
+        x_txt = st.text_area("X 데이터", "160, 165, 170, 175, 180")
+        y_txt = st.text_area("Y 데이터", "55, 60, 65, 72, 78")
+
+        def parse_nums(t: str) -> np.ndarray:
+            parts = [p.strip() for p in t.replace("\n", ",").split(",")]
+            nums = []
+            for p in parts:
+                if not p:
+                    continue
+                try:
+                    nums.append(float(p))
+                except:
+                    pass
+            return np.array(nums, dtype=float)
+
+        x = parse_nums(x_txt)
+        y = parse_nums(y_txt)
+
+    # 결측 제거(쌍 기준)
+    xy = pd.DataFrame({"x": x, "y": y}).replace([np.inf, -np.inf], np.nan).dropna()
+    n = len(xy)
+    if n < 3:
+        st.error("검정을 위해서는 (결측 제거 후) 최소 3쌍 이상의 데이터가 필요합니다.")
+        st.stop()
+
+    x = xy["x"].to_numpy()
+    y = xy["y"].to_numpy()
+
+    # 피어슨 상관검정
+    r, p = stats.pearsonr(x, y)
+
+    # t 통계량(설명용)
+    r_safe = float(np.clip(r, -0.999999, 0.999999))
+    t_stat = r_safe * np.sqrt((n - 2) / (1 - r_safe**2))
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("표본 수 n", f"{n}")
+    c2.metric("상관계수 r", f"{r:.4f}")
+    c3.metric("p-value", f"{p:.6f}")
+
+    st.caption(f"t 통계량(설명용): {t_stat:.4f} / 자유도(df) = {n-2}")
+
+    st.markdown("### 결론(자동)")
+    if p < alpha:
+        st.success(
+            f"p-value({p:.6f}) < α({alpha}) 이므로 **귀무가설(H0)을 기각**합니다.\n\n"
+            "→ 두 변수는 **통계적으로 유의한 상관관계가 있다**고 결론낼 수 있습니다."
+        )
+    else:
+        st.warning(
+            f"p-value({p:.6f}) ≥ α({alpha}) 이므로 **귀무가설(H0)을 기각할 수 없습니다.**\n\n"
+            "→ 상관관계가 있다고 말할 **통계적 근거가 부족**합니다."
+        )
+
+    st.markdown("### 산점도(회귀선 포함)")
+    slope, intercept = np.polyfit(x, y, 1)
+    x_line = np.linspace(x.min(), x.max(), 50)
+    y_line = slope * x_line + intercept
+
+    fig = plt.figure()
+    plt.scatter(x, y)
+    plt.plot(x_line, y_line)
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.grid(True, alpha=0.3)
+    st.pyplot(fig)
+
+    st.caption("주의: 상관관계는 인과관계가 아닙니다. (상관 ≠ 원인-결과)")
