@@ -18,18 +18,15 @@ COUNTRIES = ["KOR", "JPN", "CHN", "DEU", "USA", "FRA", "ITA", "ESP", "NLD", "CAN
 COUNTRY_NAME = {
     "KOR": "대한민국", "JPN": "일본", "CHN": "중국", "DEU": "독일", "USA": "미국",
     "FRA": "프랑스", "ITA": "이탈리아", "ESP": "스페인", "NLD": "네덜란드", "CAN": "캐나다",
-    "MEX": "멕시코", "IND": "인도", "BRA": "브라질", "TUR": "튀르키예", "SGP": "싱가포르"
+    "MEX": "멕시코", "IND": "인도", "BRA": "브라질", "TUR": "튀르키예", "SGP": "싱가포르",
 }
 START_YEAR = 2010
 END_YEAR = 2023
-COUNTRY_PARAM = ";".join(COUNTRIES)
+DATA_FILE = "final_dataset.csv"
 
 
 def setup_font():
-    for path in [
-        os.path.join(os.getcwd(), "fonts", "NotoSansKR-Regular.otf"),
-        os.path.join(os.getcwd(), "fonts", "NotoSansKR-Regular.ttf"),
-    ]:
+    for path in [os.path.join(os.getcwd(), "fonts", "NotoSansKR-Regular.otf"), os.path.join(os.getcwd(), "fonts", "NotoSansKR-Regular.ttf")]:
         if os.path.exists(path):
             try:
                 fm.fontManager.addfont(path)
@@ -57,18 +54,50 @@ st.markdown(
 )
 
 
+def label(col: str) -> str:
+    return {
+        "robot_density": "로봇밀도",
+        "industry": "산업 고용 비중",
+        "service": "서비스업 고용 비중",
+        "gdp": "1인당 GDP",
+        "log_gdp": "log(1인당 GDP)",
+    }.get(col, col)
+
+
+def strength(r: float) -> str:
+    ar = abs(float(r))
+    if ar < 0.3:
+        return "약한 상관"
+    if ar < 0.7:
+        return "중간 정도의 상관"
+    return "강한 상관"
+
+
+def safe_log(s: pd.Series) -> pd.Series:
+    return np.log(pd.to_numeric(s, errors="coerce").clip(lower=1))
+
+
+@st.cache_data(show_spinner=False)
+def load_csv_dataset() -> pd.DataFrame:
+    df = pd.read_csv(DATA_FILE)
+    for col in ["year", "industry", "service", "gdp", "robot_density"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df[df["country"].isin(COUNTRIES)].copy()
+    df = df[df["year"].between(START_YEAR, END_YEAR)].copy()
+    df["country_name"] = df["country"].map(COUNTRY_NAME)
+    df = df.dropna(subset=["industry", "service", "gdp", "robot_density"])
+    return df.sort_values(["country", "year"]).reset_index(drop=True)
+
+
 @st.cache_data(ttl=86400, show_spinner=False)
 def wb_indicator(indicator_code: str, value_name: str) -> pd.DataFrame:
-    url = (
-        f"https://api.worldbank.org/v2/country/{COUNTRY_PARAM}/indicator/{indicator_code}"
-        f"?format=json&date={START_YEAR}:{END_YEAR}&per_page=20000"
-    )
-    response = requests.get(url, timeout=40)
+    country_param = ";".join(COUNTRIES)
+    url = f"https://api.worldbank.org/v2/country/{country_param}/indicator/{indicator_code}?format=json&date={START_YEAR}:{END_YEAR}&per_page=20000"
+    response = requests.get(url, timeout=90)
     response.raise_for_status()
     data = response.json()
     if not isinstance(data, list) or len(data) < 2 or data[1] is None:
         raise ValueError(f"World Bank API 응답이 비어 있습니다: {indicator_code}")
-
     out = pd.DataFrame(data[1])[["countryiso3code", "date", "value"]].copy()
     out = out.rename(columns={"countryiso3code": "country", "date": "year", "value": value_name})
     out["year"] = pd.to_numeric(out["year"], errors="coerce")
@@ -109,7 +138,6 @@ def build_from_api() -> pd.DataFrame:
     industry = wb_indicator("SL.IND.EMPL.ZS", "industry")
     service = wb_indicator("SL.SRV.EMPL.ZS", "service")
     gdp = wb_indicator("NY.GDP.PCAP.KD", "gdp")
-
     df = industry.merge(service, on=["country", "year"], how="inner")
     df = df.merge(gdp, on=["country", "year"], how="inner")
     df = df.merge(robot_density_full(), on=["country", "year"], how="inner")
@@ -119,52 +147,15 @@ def build_from_api() -> pd.DataFrame:
     return df.sort_values(["country", "year"]).reset_index(drop=True)
 
 
-@st.cache_data(show_spinner=False)
-def fallback_csv() -> pd.DataFrame:
-    df = pd.read_csv("final_dataset.csv")
-    for col in ["year", "industry", "service", "gdp", "robot_density"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df[df["country"].isin(COUNTRIES)].copy()
-    df = df[df["year"].between(START_YEAR, END_YEAR)]
-    df["country_name"] = df["country"].map(COUNTRY_NAME)
-    df = df.dropna(subset=["industry", "service", "gdp", "robot_density"])
-    return df.sort_values(["country", "year"]).reset_index(drop=True)
-
-
 def load_dataset():
+    if os.path.exists(DATA_FILE):
+        return load_csv_dataset(), "저장소 final_dataset.csv 기본 데이터"
     try:
         return build_from_api(), "World Bank API 자동 수집 + 로봇밀도 보간"
     except Exception as err:
-        try:
-            st.warning(f"API 호출 실패. 저장소의 final_dataset.csv를 예비 데이터로 사용합니다. 오류: {err}")
-            return fallback_csv(), "저장소 final_dataset.csv 예비 데이터"
-        except Exception as err2:
-            st.error("API 데이터와 예비 CSV 로드가 모두 실패했습니다.")
-            st.exception(err2)
-            st.stop()
-
-
-def label(col: str) -> str:
-    return {
-        "robot_density": "로봇밀도",
-        "industry": "산업 고용 비중",
-        "service": "서비스업 고용 비중",
-        "gdp": "1인당 GDP",
-        "log_gdp": "log(1인당 GDP)",
-    }.get(col, col)
-
-
-def safe_log(s: pd.Series) -> pd.Series:
-    return np.log(pd.to_numeric(s, errors="coerce").clip(lower=1))
-
-
-def strength(r: float) -> str:
-    ar = abs(float(r))
-    if ar < 0.3:
-        return "약한 상관"
-    if ar < 0.7:
-        return "중간 정도의 상관"
-    return "강한 상관"
+        st.error("데이터 로드 실패: final_dataset.csv가 없고 World Bank API도 응답하지 않습니다.")
+        st.exception(err)
+        st.stop()
 
 
 def fit_explain(data: pd.DataFrame, y_col: str):
@@ -231,12 +222,8 @@ def line_chart(data: pd.DataFrame, y_col: str):
 
 def tonggrami_df(data: pd.DataFrame) -> pd.DataFrame:
     return data[["country", "year", "robot_density", "industry", "service", "gdp"]].rename(columns={
-        "country": "국가",
-        "year": "연도",
-        "robot_density": "로봇밀도",
-        "industry": "산업고용비중",
-        "service": "서비스업고용비중",
-        "gdp": "GDP",
+        "country": "국가", "year": "연도", "robot_density": "로봇밀도",
+        "industry": "산업고용비중", "service": "서비스업고용비중", "gdp": "GDP",
     })
 
 
@@ -247,15 +234,7 @@ def corr_summary(data: pd.DataFrame) -> pd.DataFrame:
             t = group[[x_col, y_col]].dropna()
             if len(t) >= 3 and t[x_col].std() > 0 and t[y_col].std() > 0:
                 r, p = stats.pearsonr(t[x_col], t[y_col])
-                rows.append({
-                    "국가": country,
-                    "X변수": label(x_col),
-                    "Y변수": label(y_col),
-                    "표본수": len(t),
-                    "상관계수_r": r,
-                    "p_value": p,
-                    "판정_0.05": "유의함" if p < 0.05 else "유의하지 않음",
-                })
+                rows.append({"국가": country, "X변수": label(x_col), "Y변수": label(y_col), "표본수": len(t), "상관계수_r": r, "p_value": p, "판정_0.05": "유의함" if p < 0.05 else "유의하지 않음"})
     return pd.DataFrame(rows)
 
 
@@ -268,55 +247,40 @@ def parse_numbers(text: str):
 
 
 st.title("자동화 확대와 고용 구조 변화 분석 앱")
-st.caption("World Bank API 기반 고용·GDP 데이터 + 로봇밀도 보간 + 상관분석·회귀분석·예측·통그라미 CSV 생성")
+st.caption("저장소 CSV를 기본으로 안정적으로 로드하고, CSV가 없을 때만 World Bank API로 데이터를 생성합니다.")
 
-with st.spinner("데이터셋을 생성하는 중입니다..."):
+with st.spinner("데이터셋을 불러오는 중입니다..."):
     df, data_note = load_dataset()
 
 st.sidebar.header("분석 필터")
 selected = st.sidebar.multiselect("국가 선택", COUNTRIES, default=["KOR", "JPN", "CHN", "DEU", "USA"])
-year_range = st.sidebar.slider(
-    "연도 범위",
-    int(df["year"].min()),
-    int(df["year"].max()),
-    (int(df["year"].min()), int(df["year"].max())),
-)
+year_range = st.sidebar.slider("연도 범위", int(df["year"].min()), int(df["year"].max()), (int(df["year"].min()), int(df["year"].max())))
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 데이터 출처")
-st.sidebar.markdown("- World Bank WDI: 고용 구조·GDP\n- 로봇밀도: 기준값 입력 후 선형 보간\n- API 실패 시 저장소 CSV 예비 사용")
+st.sidebar.markdown("- World Bank WDI: 고용 구조·GDP\n- 로봇밀도: 기준값 입력 후 선형 보간\n- 실행 안정성을 위해 저장소 CSV 기본 사용")
 
 d = df[df["country"].isin(selected) & df["year"].between(year_range[0], year_range[1])].copy()
 if d.empty:
     st.warning("선택한 조건에 해당하는 데이터가 없습니다.")
     st.stop()
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "① 연구 소개",
-    "② 추세 분석",
-    "③ 상관관계 분석",
-    "④ 회귀 분석",
-    "⑤ 미래 예측",
-    "⑥ 데이터/다운로드",
-    "⑦ 학생용 계산기",
-])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["① 연구 소개", "② 추세 분석", "③ 상관관계 분석", "④ 회귀 분석", "⑤ 미래 예측", "⑥ 데이터/다운로드", "⑦ 학생용 계산기"])
 
 with tab1:
     st.subheader("연구 질문")
-    st.markdown(
-        """
-        **핵심 연구 질문**
+    st.markdown("""
+**핵심 연구 질문**
 
-        > 자동화 수준을 나타내는 로봇밀도 증가는 국가별 고용 구조, 특히 산업 고용 비중과 서비스업 고용 비중에 어떤 관계를 보이는가?
+> 자동화 수준을 나타내는 로봇밀도 증가는 국가별 고용 구조, 특히 산업 고용 비중과 서비스업 고용 비중에 어떤 관계를 보이는가?
 
-        **분석 흐름**
+**분석 흐름**
 
-        1. World Bank API에서 고용 구조와 GDP 데이터를 자동 수집
-        2. 로봇밀도 기준값을 연도별로 보간
-        3. 국가·연도별 데이터셋 구성
-        4. 상관분석, 가설검정, 회귀분석, 미래 예측 수행
-        5. 통그라미 업로드용 CSV 자동 생성
-        """
-    )
+1. 국가·연도별 고용 구조, GDP, 로봇밀도 데이터 구성  
+2. 상관분석과 가설검정 수행  
+3. 고정효과 회귀분석 수행  
+4. 미래 시나리오 예측 수행  
+5. 통그라미 업로드용 CSV 생성  
+""")
     st.info("**H0**: 로봇밀도와 고용 비중 사이에는 상관관계가 없다.\n\n**H1**: 로봇밀도와 고용 비중 사이에는 상관관계가 있다.")
     st.warning("`SL.IND.EMPL.ZS`는 제조업만이 아니라 산업 부문 고용 비중이다. 보고서에는 '산업 고용 비중'으로 표기하는 것이 안전하다.")
     c1, c2, c3, c4 = st.columns(4)
@@ -324,7 +288,7 @@ with tab1:
     c2.metric("연도 범위", f"{df['year'].min()}~{df['year'].max()}")
     c3.metric("전체 행 수", f"{len(df)}개")
     c4.metric("선택 행 수", f"{len(d)}개")
-    st.caption(f"현재 데이터 생성 방식: {data_note}")
+    st.caption(f"현재 데이터 로드 방식: {data_note}")
 
 with tab2:
     st.subheader("국가별 추세 분석")
@@ -372,7 +336,8 @@ with tab4:
     st.subheader("고정효과 회귀 분석")
     y_col = st.selectbox("종속변수 선택", ["industry", "service"], format_func=label, key="reg_y")
     st.code(f"{y_col} ~ robot_density + log_gdp + C(country) + C(year)", language="text")
-    model = fit_explain(d, y_col)
+    reg_base = df[df["year"].between(year_range[0], year_range[1])].copy()
+    model = fit_explain(reg_base, y_col)
     if model is None:
         st.error("회귀분석을 수행할 표본이 부족합니다.")
     else:
@@ -383,10 +348,7 @@ with tab4:
         c2.metric("p-value", f"{p_value:.6f}")
         c3.metric("R²", f"{model.rsquared:.3f}")
         c4.metric("표본 수", f"{int(model.nobs)}")
-        if p_value < 0.05:
-            st.success("로봇밀도 계수가 통계적으로 유의합니다.")
-        else:
-            st.warning("이번 회귀모형에서는 로봇밀도 계수가 통계적으로 유의하다고 보기 어렵습니다.")
+        st.success("로봇밀도 계수가 통계적으로 유의합니다.") if p_value < 0.05 else st.warning("이번 회귀모형에서는 로봇밀도 계수가 통계적으로 유의하다고 보기 어렵습니다.")
         coef = pd.DataFrame({"계수": model.params, "p-value": model.pvalues}).reset_index().rename(columns={"index": "항목"})
         st.dataframe(coef[coef["항목"].isin(["Intercept", "robot_density", "log_gdp"])], use_container_width=True)
         with st.expander("전체 회귀 결과 보기"):
